@@ -261,6 +261,7 @@ class Repository(BitbucketCloudBase):
         self.__pipelines = Pipelines("{}/pipelines".format(self.url), **self._new_session_args)
         self.__pullrequests = PullRequests("{}/pullrequests".format(self.url), **self._new_session_args)
         self.__tags = Tags("{}/refs/tags".format(self.url), **self._new_session_args)
+        # OMG
 
     def update(self, **kwargs):
         """
