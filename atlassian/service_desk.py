@@ -324,6 +324,9 @@ class ServiceDesk(AtlassianRestAPI):
             )
         return self.get(url_with_sd_id, headers=self.experimental_headers, params=params)
 
+    # add alias for spelling consistency
+    get_organizations = get_organisations
+
     def get_organization(self, organization_id):
         """
         Get an organization for a given organization ID
@@ -611,6 +614,18 @@ class ServiceDesk(AtlassianRestAPI):
         url = "rest/servicedeskapi/request/{0}/sla/{1}".format(issue_id_or_key, sla_id)
 
         return self.get(url, headers=self.experimental_headers)
+
+    def sla_rebuild(self, tickets=None):
+        """
+        Fix corrupted or missing sla
+        https://confluence.atlassian.com/jirakb/missing-or-corrupted-sla-data-in-jira-service-management-828790603.html
+        :param tickets: list of tickets like [XXX-123, XXX-124]
+        :return:
+        """
+        if tickets is None:
+            tickets = []
+        url = "rest/servicedesk/1/servicedesk/sla/admin/task/destructive/reconstruct"
+        return self.post(url, data=tickets)
 
     # Approvals
 

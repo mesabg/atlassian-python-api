@@ -5,15 +5,10 @@ import time
 import json
 
 from requests import HTTPError
+import requests
 from deprecated import deprecated
 from atlassian import utils
-from .errors import (
-    ApiError,
-    ApiNotFoundError,
-    ApiPermissionError,
-    ApiValueError,
-    ApiConflictError,
-)
+from .errors import ApiError, ApiNotFoundError, ApiPermissionError, ApiValueError, ApiConflictError, ApiNotAcceptable
 from .rest_client import AtlassianRestAPI
 
 log = logging.getLogger(__name__)
@@ -213,14 +208,15 @@ class Confluence(AtlassianRestAPI):
         """
         return self.get_page_child_by_type(page_id=page_id, type="page")
 
-    def get_page_id(self, space, title):
+    def get_page_id(self, space, title, type="page"):
         """
         Provide content id from search result by title and space
         :param space: SPACE key
         :param title: title
+        :param type: type of content: Page or Blogpost. Defaults to page
         :return:
         """
-        return (self.get_page_by_title(space, title) or {}).get("id")
+        return (self.get_page_by_title(space, title, type=type) or {}).get("id")
 
     def get_parent_content_id(self, page_id):
         """
@@ -275,7 +271,7 @@ class Confluence(AtlassianRestAPI):
         """
         return self.get_page_by_title(space, title, start, limit, expand)
 
-    def get_page_by_title(self, space, title, start=0, limit=1, expand=None):
+    def get_page_by_title(self, space, title, start=0, limit=1, expand=None, type="page"):
         """
         Returns the first page  on a piece of Content.
         :param space: Space key
@@ -284,12 +280,13 @@ class Confluence(AtlassianRestAPI):
         :param limit: OPTIONAL: The limit of the number of labels to return, this may be restricted by
                             fixed system limits. Default: 1.
         :param expand: OPTIONAL: expand e.g. history
+        :param type: OPTIONAL: Type of content: Page or Blogpost. Defaults to page
         :return: The JSON data returned from searched results the content endpoint, or the results of the
                  callback. Will raise requests.HTTPError on bad input, potentially.
                  If it has IndexError then return the None.
         """
         url = "rest/api/content"
-        params = {}
+        params = {"type": type}
         if start is not None:
             params["start"] = int(start)
         if limit is not None:
@@ -331,7 +328,7 @@ class Confluence(AtlassianRestAPI):
         :param version: (int)
         :param expand: OPTIONAL: Default value: history,space,version
                        We can also specify some extensions such as extensions.inlineProperties
-                       (for getting inline comment-specific properties) or extensions.resolution
+                       (for getting inline comment-specific properties) or extensions. Resolution
                        for the resolution status of each comment in the results
         :return:
         """
@@ -764,6 +761,10 @@ class Confluence(AtlassianRestAPI):
         if full_width is True:
             data["metadata"]["properties"]["content-appearance-draft"] = {"value": "full-width"}
             data["metadata"]["properties"]["content-appearance-published"] = {"value": "full-width"}
+        else:
+            data["metadata"]["properties"]["content-appearance-draft"] = {"value": "fixed-width"}
+            data["metadata"]["properties"]["content-appearance-published"] = {"value": "fixed-width"}
+
         try:
             response = self.post(url, data=data)
         except HTTPError as e:
@@ -915,7 +916,7 @@ class Confluence(AtlassianRestAPI):
     @deprecated(version="3.7.0", reason="Use get_blueprint_templates()")
     def get_all_blueprints_from_space(self, space, start=0, limit=None, expand=None):
         """
-        Get all users blue prints from space. Experimental API
+        Get all users blueprints from space. Experimental API
         :param space: Space Key
         :param start: OPTIONAL: The start point of the collection to return. Default: None (0).
         :param limit: OPTIONAL: The limit of the number of pages to return, this may be restricted by
@@ -1572,17 +1573,18 @@ class Confluence(AtlassianRestAPI):
         representation="storage",
         minor_edit=False,
         version_comment=None,
+        full_width=False,
     ):
         """Duplicate update_page. Left for the people who used it before. Use update_page instead"""
         return self.update_page(
             page_id=page_id,
             title=title,
             body=body,
-            parent_id=None,
             type=type,
             representation=representation,
             minor_edit=minor_edit,
             version_comment=version_comment,
+            full_width=full_width,
         )
 
     def update_page(
@@ -1648,6 +1650,9 @@ class Confluence(AtlassianRestAPI):
         if full_width is True:
             data["metadata"]["properties"]["content-appearance-draft"] = {"value": "full-width"}
             data["metadata"]["properties"]["content-appearance-published"] = {"value": "full-width"}
+        else:
+            data["metadata"]["properties"]["content-appearance-draft"] = {"value": "fixed-width"}
+            data["metadata"]["properties"]["content-appearance-published"] = {"value": "fixed-width"}
         try:
             response = self.put(
                 "rest/api/content/{0}".format(page_id),
@@ -2090,6 +2095,42 @@ class Confluence(AtlassianRestAPI):
 
         return response.get("results")
 
+    def create_group(self, name):
+        """
+        Create a group by given group parameter
+
+        :param name: str
+        :return: New group params
+        """
+        url = "rest/api/admin/group"
+        data = {"name": name, "type": "group"}
+        return self.post(url, data=data)
+
+    def remove_group(self, name):
+        """
+        Delete a group by given group parameter
+        If you delete a group and content is restricted to that group, the content will be hidden from all users
+
+        :param name: str
+        :return:
+        """
+        log.warning("Removing group...")
+        url = "rest/api/admin/group/{groupName}".format(groupName=name)
+
+        try:
+            response = self.delete(url)
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                # Raise ApiError as the documented reason is ambiguous
+                raise ApiError(
+                    "There is no group with the given name, "
+                    "or the calling user does not have permission to delete it",
+                    reason=e,
+                )
+            raise
+
+        return response
+
     def get_group_members(self, group_name="confluence-users", start=0, limit=1000, expand=None):
         """
         Get a paginated collection of users in the given group
@@ -2281,7 +2322,7 @@ class Confluence(AtlassianRestAPI):
     def get_user_details_by_username(self, username, expand=None):
         """
         Get information about a user through username
-        :param username: The user name
+        :param username: The username
         :param expand: OPTIONAL expand for get status of user.
                 Possible param is "status". Results are "Active, Deactivated"
         :return: Returns the user details
@@ -2429,7 +2470,11 @@ class Confluence(AtlassianRestAPI):
         url = "spaces/flyingpdf/pdfpageexport.action?pageId={pageId}".format(pageId=page_id)
         if self.api_version == "cloud":
             url = self.get_pdf_download_url_for_confluence_cloud(url)
-
+            if not url:
+                log.error("Failed to get download PDF url.")
+                raise ApiNotFoundError("Failed to export page as PDF", reason="Failed to get download PDF url.")
+            # To download the PDF file, the request should be with no headers of authentications.
+            return requests.get(url, timeout=75).content
         return self.get(url, headers=headers, not_json_response=True)
 
     def get_page_as_word(self, page_id):
@@ -2528,7 +2573,7 @@ class Confluence(AtlassianRestAPI):
 
     def anonymous(self):
         """
-        Get information about the how anonymous is represented in confluence
+        Get information about how anonymous is represented in confluence
         :return:
         """
         try:
@@ -2658,51 +2703,50 @@ class Confluence(AtlassianRestAPI):
     def get_pdf_download_url_for_confluence_cloud(self, url):
         """
         Confluence cloud does not return the PDF document when the PDF
-        export is initiated. Instead it starts a process in the background
+        export is initiated. Instead, it starts a process in the background
         and provides a link to download the PDF once the process completes.
-        This functions polls the long running task page and returns the
+        This functions polls the long-running task page and returns the
         download url of the PDF.
         :param url: URL to initiate PDF export
         :return: Download url for PDF file
         """
-        download_url = None
         try:
-            long_running_task = True
+            running_task = True
             headers = self.form_token_headers
             log.info("Initiate PDF export from Confluence Cloud")
             response = self.get(url, headers=headers, not_json_response=True)
             response_string = response.decode(encoding="utf-8", errors="strict")
             task_id = response_string.split('name="ajs-taskId" content="')[1].split('">')[0]
-            poll_url = "runningtaskxml.action?taskId={0}".format(task_id)
-            while long_running_task:
-                long_running_task_response = self.get(poll_url, headers=headers, not_json_response=True)
-                long_running_task_response_parts = long_running_task_response.decode(
-                    encoding="utf-8", errors="strict"
-                ).split("\n")
-                percentage_complete = long_running_task_response_parts[6].strip()
-                is_successful = long_running_task_response_parts[7].strip()
-                is_complete = long_running_task_response_parts[8].strip()
-                log.info("Sleep for 5s.")
-                time.sleep(5)
+            poll_url = "/services/api/v1/task/{0}/progress".format(task_id)
+            while running_task:
                 log.info("Check if export task has completed.")
-                if is_complete == "<isComplete>true</isComplete>":
-                    if is_successful == "<isSuccessful>true</isSuccessful>":
-                        log.info(percentage_complete)
-                        log.info("Downloading content...")
-                        log.debug("Extract taskId and download PDF.")
-                        current_status = long_running_task_response_parts[3]
-                        download_url = current_status.split("href=&quot;/wiki/")[1].split("&quot")[0]
-                        long_running_task = False
-                    elif is_successful == "<isSuccessful>false</isSuccessful>":
+                progress_response = self.get(poll_url)
+                percentage_complete = int(progress_response.get("progress", 0))
+                task_state = progress_response.get("state")
+                if percentage_complete == 100:
+                    running_task = False
+                    log.info("Task completed - {task_state}".format(task_state=task_state))
+                    if task_state == "FAILED":
                         log.error("PDF conversion not successful.")
                         return None
+                    log.debug("Extract task results to download PDF.")
+                    task_result_url = progress_response.get("result")
                 else:
-                    log.info(percentage_complete)
+                    log.info(
+                        "{percentage_complete}% - {task_state}".format(
+                            percentage_complete=percentage_complete, task_state=task_state
+                        )
+                    )
+                    time.sleep(3)
+            log.debug("Task successfully done, querying the task result for the download url")
+            # task result url starts with /wiki, remove it.
+            task_content = self.get(task_result_url[5:], not_json_response=True)
+            download_url = task_content.decode(encoding="utf-8", errors="strict")
+            log.debug("Successfully got the download url")
+            return download_url
         except IndexError as e:
             log.error(e)
             return None
-
-        return download_url
 
     def audit(
         self,
@@ -2887,7 +2931,7 @@ class Confluence(AtlassianRestAPI):
 
     def get_subtree_of_content_ids(self, page_id):
         """
-        Get sub tree of page ids
+        Get subtree of page ids
         :param page_id:
         :return: Set of page ID
         """
@@ -2942,6 +2986,101 @@ class Confluence(AtlassianRestAPI):
         url = "rest/jira-metadata/1.0/metadata/cache"
         params = {"globalId": global_id}
         return self.delete(url, params=params)
+
+    # Collaborative editing
+    def collaborative_editing_get_configuration(self):
+        """
+        Get collaborative editing configuration
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/configuration"
+        return self.get(url, headers=self.no_check_headers)
+
+    def collaborative_editing_disable(self):
+        """
+        Disable collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/disable"
+        return self.post(url, headers=self.no_check_headers)
+
+    def collaborative_editing_enable(self):
+        """
+        Disable collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/enable"
+        return self.post(url, headers=self.no_check_headers)
+
+    def collaborative_editing_restart(self):
+        """
+        Disable collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/restart"
+        return self.post(url, headers=self.no_check_headers)
+
+    def collaborative_editing_shared_draft_status(self):
+        """
+        Status of collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return: false or true parameter in json
+                {
+                     "sharedDraftsEnabled": false
+                }
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/status"
+        return self.get(url, headers=self.no_check_headers)
+
+    def collaborative_editing_synchrony_status(self):
+        """
+        Status of collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return: stopped or running parameter in json
+            {
+                "status": "stopped"
+            }
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony-interop/synchrony-status"
+        return self.get(url, headers=self.no_check_headers)
+
+    def synchrony_get_configuration(self):
+        """
+        Status of collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony/1.0/config/status"
+        return self.get(url, headers=self.no_check_headers)
+
+    def synchrony_remove_draft(self, page_id):
+        """
+        Status of collaborative editing
+        Related to the on-prem setup Confluence Data Center
+        :return:
+        """
+        if self.cloud:
+            return ApiNotAcceptable
+        url = "rest/synchrony/1.0/content/{pageId}/changes/unpublished".format(pageId=page_id)
+        return self.delete(url)
 
     def get_license_details(self):
         """

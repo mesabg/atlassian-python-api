@@ -695,10 +695,10 @@ class Bitbucket(BitbucketBase):
 
     def delete_project_condition(self, project_key, id_condition):
         """
-        Request type: DELETE
         Delete a specific condition for this repository slug inside project.
         For further information visit:
             https://docs.atlassian.com/bitbucket-server/rest/5.16.0/bitbucket-default-reviewers-rest.html#idm52264896304
+        Request type: DELETE
         :projectKey: str- project key involved
         :idCondition: int - condition id involved
         :return:
@@ -958,7 +958,7 @@ class Bitbucket(BitbucketBase):
         Grant the specified repository permission to a specific user
         :param project_key: The project key
         :param repo_key: The repository key (slug)
-        :param username: user name to be granted
+        :param username: username to be granted
         :param permission: the repository permissions available are 'REPO_ADMIN', 'REPO_WRITE' and 'REPO_READ'
         :return:
         """
@@ -975,7 +975,7 @@ class Bitbucket(BitbucketBase):
         if they do not have a higher project or global permission.
         :param project_key: The project key
         :param repo_key: The repository key (slug)
-        :param username: user name to be granted
+        :param username: username to be granted
         :return:
         """
         url = self._url_repo_users(project_key, repo_key)
@@ -1567,7 +1567,7 @@ class Bitbucket(BitbucketBase):
         :param project_key:
         :param repository_slug:
         :param state:
-        :param order: OPTIONAL: defaults to NEWEST) the order to return pull requests in, either OLDEST
+        :param order: OPTIONAL: defaults to NEWEST the order to return pull requests in, either OLDEST
                                 (as in: "oldest first") or NEWEST.
         :param limit:
         :param start:
@@ -1685,7 +1685,21 @@ class Bitbucket(BitbucketBase):
         """
         Deprecated name since 1.15.1. Let's use the get_pull_request()
         """
-        return self.get_pull_request(*args, **kwargs)
+
+    def update_pull_request(self, project_key, repository_slug, pull_request_id, data):
+        """
+        Update a pull request.
+        The authenticated user must have REPO_WRITE permission
+        for the repository that this pull request targets to call this resource.
+        :param project_key:
+        :param repository_slug:
+        :param pull_request_id: the ID of the pull request within the repository
+        :param data: json body
+        :return:
+        """
+
+        url = self._url_pull_request(project_key, repository_slug, pull_request_id)
+        return self.put(url, data=data)
 
     def delete_pull_request(
         self,
@@ -1901,7 +1915,7 @@ class Bitbucket(BitbucketBase):
         Update the text of a comment.
         Only the user who created a comment may update it.
 
-        Note: the supplied supplied JSON object must contain a version
+        Note: the supplied JSON object must contain a version
         that must match the server's version of the comment
         or the update will fail.
         """
@@ -2191,6 +2205,33 @@ class Bitbucket(BitbucketBase):
             params["limit"] = limit
         return self._get_paged(url, params=params)
 
+    def get_commit_changes(self, project_key, repository_slug, hash_newest=None, merges="include", commit_id=None):
+        """
+        Get commit list from repo
+        :param project_key:
+        :param repository_slug:
+        :param hash_newest:
+        :param merges: OPTIONAL: include|exclude|only if present, controls how merge commits should be filtered.
+        :param commit_id
+        :return:
+        """
+        url = self._url_commit_c(project_key, repository_slug, commit_id=commit_id)
+        params = {"merges": merges}
+        if hash_newest:
+            params["until"] = hash_newest
+        return self.get(url, params=params)
+
+    def _url_commit_c(self, project_key, repository_slug, api_root=None, api_version=None, commit_id=None):
+        return "{}/commits/{}/changes".format(
+            self._url_repo(
+                project_key,
+                repository_slug,
+                api_root=api_root,
+                api_version=api_version,
+            ),
+            commit_id,
+        )
+
     def _url_commit(
         self,
         project_key,
@@ -2313,7 +2354,7 @@ class Bitbucket(BitbucketBase):
         Retrieve the specified code-insights report.
         :projectKey: str
         :repositorySlug: str
-        :commitId: str
+        :commit_id: str
         :report_key: str
         """
         url = self._url_code_insights_report(project_key, repository_slug, commit_id, report_key)
@@ -2324,7 +2365,7 @@ class Bitbucket(BitbucketBase):
         Delete a report for the given commit. Also deletes any annotations associated with this report.
         :projectKey: str
         :repositorySlug: str
-        :commitId: str
+        :commit_id: str
         :report_key: str
         """
         url = self._url_code_insights_report(project_key, repository_slug, commit_id, report_key)
@@ -2369,7 +2410,7 @@ class Bitbucket(BitbucketBase):
     ):
         """
         Retrieve a page of files from particular directory of a repository.
-        The search is done recursively, so all files from any sub-directory of the specified directory will be returned.
+        The search is done recursively, so all files from any subdirectory of the specified directory will be returned.
         The authenticated user must have REPO_READ permission for the specified repository to call this resource.
         :param start:
         :param project_key:
@@ -2839,10 +2880,10 @@ class Bitbucket(BitbucketBase):
 
     def delete_repo_condition(self, project_key, repo_key, id_condition):
         """
-        Request type: DELETE
         Delete a specific condition for this repository slug inside project.
         For further information visit:
             https://docs.atlassian.com/bitbucket-server/rest/5.16.0/bitbucket-default-reviewers-rest.html#idm8287339888
+        Request type: DELETE
         :projectKey: str- project key involved
         :repoKey: str - repo key involved
         :idCondition: int - condition id involved

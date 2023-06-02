@@ -9,8 +9,8 @@ from .jira import Jira
 from .marketplace import MarketPlace
 from .portfolio import Portfolio
 from .service_desk import ServiceDesk
+from .service_desk import ServiceDesk as ServiceManagement
 from .xray import Xray
-
 
 __all__ = [
     "Confluence",
@@ -23,6 +23,7 @@ __all__ = [
     "Stash",
     "Crowd",
     "ServiceDesk",
+    "ServiceManagement",
     "MarketPlace",
     "Xray",
     "Insight",

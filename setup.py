@@ -26,7 +26,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=["deprecated", "requests", "six", "oauthlib", "requests_oauthlib"],
-    extras_require={"kerberos": ['requests-kerberos']},
+    extras_require={"kerberos": ["requests-kerberos"]},
     platforms="Platform Independent",
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -50,6 +50,7 @@ setup(
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
         "Topic :: Utilities",
         "Topic :: Internet",
         "Topic :: Internet :: WWW/HTTP",

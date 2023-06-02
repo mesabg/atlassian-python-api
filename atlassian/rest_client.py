@@ -110,7 +110,7 @@ class AtlassianRestAPI(object):
         oauth = OAuth1(
             oauth_dict["consumer_key"],
             rsa_key=oauth_dict["key_cert"],
-            signature_method=SIGNATURE_RSA,
+            signature_method=oauth_dict.get("signature_method", SIGNATURE_RSA),
             resource_owner_key=oauth_dict["access_token"],
             resource_owner_secret=oauth_dict["access_token_secret"],
         )
@@ -276,7 +276,7 @@ class AtlassianRestAPI(object):
         :param flags:
         :param params:
         :param headers:
-        :param not_json_response: OPTIONAL: For get content from raw requests packet
+        :param not_json_response: OPTIONAL: For get content from raw request's packet
         :param trailing: OPTIONAL: for wrap slash symbol in the end of string
         :param absolute: bool, OPTIONAL: Do not prefix url, url is absolute
         :param advanced_mode: bool, OPTIONAL: Return the raw response
@@ -381,6 +381,47 @@ class AtlassianRestAPI(object):
             return response
         return self._response_handler(response)
 
+    """
+        Partial modification of resource by PATCH Method
+        LINK: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/PATCH
+    """
+
+    def patch(
+        self,
+        path,
+        data=None,
+        headers=None,
+        files=None,
+        trailing=None,
+        params=None,
+        absolute=False,
+        advanced_mode=False,
+    ):
+        """
+        :param path: Path of request
+        :param data:
+        :param headers: adjusted headers, usually it's default
+        :param files:
+        :param trailing:
+        :param params:
+        :param absolute:
+        :param advanced_mode: bool, OPTIONAL: Return the raw response
+        :return: if advanced_mode is not set - returns dictionary. If it is set - returns raw response.
+        """
+        response = self.request(
+            "PATCH",
+            path=path,
+            data=data,
+            headers=headers,
+            files=files,
+            params=params,
+            trailing=trailing,
+            absolute=absolute,
+        )
+        if self.advanced_mode or advanced_mode:
+            return response
+        return self._response_handler(response)
+
     def delete(
         self,
         path,
@@ -433,7 +474,11 @@ class AtlassianRestAPI(object):
                     error_msg = "\n".join([k + ": " + v for k, v in j.items()])
                 else:
                     error_msg = "\n".join(
-                        j.get("errorMessages", list()) + [k.get("message", "") for k in j.get("errors", dict())]
+                        j.get("errorMessages", list())
+                        + [
+                            k.get("message", "") if isinstance(k, dict) else v
+                            for k, v in j.get("errors", dict()).items()
+                        ]
                     )
             except Exception as e:
                 log.error(e)
@@ -442,3 +487,8 @@ class AtlassianRestAPI(object):
                 raise HTTPError(error_msg, response=response)
         else:
             response.raise_for_status()
+
+    @property
+    def session(self):
+        """Providing access to the restricted field"""
+        return self._session
